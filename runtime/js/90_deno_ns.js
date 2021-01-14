@@ -89,6 +89,10 @@
     fdatasync: __bootstrap.fs.fdatasync,
   };
 
+  __bootstrap.wpsNs = {
+    hello: __bootstrap.wps.hello
+  };
+
   __bootstrap.denoNsUnstable = {
     signal: __bootstrap.signals.signal,
     signals: __bootstrap.signals.signals,

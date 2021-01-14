@@ -133,6 +133,7 @@ impl MainWorker {
       );
       ops::fs_events::init(js_runtime);
       ops::fs::init(js_runtime);
+      ops::wps::init(js_runtime);
       ops::io::init(js_runtime);
       ops::net::init(js_runtime);
       ops::os::init(js_runtime);

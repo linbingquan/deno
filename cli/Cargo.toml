@@ -40,6 +40,7 @@ deno_core = { path = "../core", version = "0.77.1" }
 deno_doc = "0.1.21"
 deno_lint = "0.2.17"
 deno_runtime = { path = "../runtime", version = "0.7.1" }
+wps = { path = "../wps", version = "0.1.0" }
 
 atty = "0.2.14"
 base64 = "0.13.0"
