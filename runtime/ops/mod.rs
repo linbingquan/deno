@@ -22,6 +22,7 @@ pub mod web_worker;
 pub mod webgpu;
 pub mod websocket;
 pub mod worker_host;
+pub mod wps;
 
 use crate::metrics::metrics_op;
 use deno_core::bin_op_async;

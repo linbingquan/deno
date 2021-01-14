@@ -244,6 +244,7 @@ impl WebWorker {
       if options.use_deno_namespace {
         ops::fs_events::init(js_runtime);
         ops::fs::init(js_runtime);
+        ops::wps::init(js_runtime);
         ops::net::init(js_runtime);
         ops::os::init(js_runtime);
         ops::permissions::init(js_runtime);
