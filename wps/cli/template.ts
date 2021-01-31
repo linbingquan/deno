@@ -1,3 +1,5 @@
+import { format } from './utils.ts';
+
 /**
  * vue3 html模板
  */
@@ -12,6 +14,7 @@ const vue3 = `<!DOCTYPE html>
     <div id="app">
       {{ message }}
     </div>
+    <div>创建时间：${format(new Date())}</div>
 
     <script>
       const Hello = {
@@ -43,6 +46,7 @@ const react = `<!DOCTYPE html>
   </head>
   <body>
     <div id="root"></div>
+    <div>创建时间：${format(new Date())}</div>
     <script type="text/babel">
 
       ReactDOM.render(
