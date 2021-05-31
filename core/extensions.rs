@@ -119,7 +119,7 @@ impl ExtensionBuilder {
 /// ```
 #[macro_export]
 macro_rules! include_js_files {
-  (prefix $prefix:literal, $($file:literal,)+) => {
+  (prefix $prefix:literal, $($file:literal),*) => {
     vec![
       $((
         concat!($prefix, "/", $file),
@@ -130,7 +130,7 @@ macro_rules! include_js_files {
           let src = std::fs::read_to_string(path)?;
           Ok(src)
         }),
-      ),)+
+      )),*
     ]
   };
 }

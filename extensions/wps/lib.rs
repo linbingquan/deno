@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 pub fn init() -> Extension {
   Extension::builder()
-    .js(include_js_files!(prefix "deno:extensions/wps", "01_wps.js",))
+    .js(include_js_files!(prefix "deno:extensions/wps", "01_wps.js"))
     .ops(vec![("op_hello", op_sync(op_hello))])
     .build()
 }
