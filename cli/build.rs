@@ -69,6 +69,7 @@ fn create_compiler_snapshot(
     "deno.broadcast_channel",
     deno_broadcast_channel::get_declaration(),
   );
+  op_crate_libs.insert( "deno.wps", deno_wps::get_declaration());
 
   // ensure we invalidate the build properly.
   for (_, path) in op_crate_libs.iter() {

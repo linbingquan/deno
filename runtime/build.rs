@@ -49,6 +49,7 @@ fn create_runtime_snapshot(snapshot_path: &Path, files: Vec<PathBuf>) {
       None,
     ),
     deno_webstorage::init(None),
+    deno_wps::init(),
     deno_crypto::init(None),
     deno_webgpu::init(false),
     deno_timers::init::<deno_timers::NoTimersPermission>(),

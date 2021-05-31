@@ -13,6 +13,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "addr2line"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03345e98af8f3d786b6d9f656ccfa6ac316d954e92bc4841f0bba20789d5fb5a"
+dependencies = [
+ "gimli",
+]
+
+[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -180,6 +189,21 @@ name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
+
+[[package]]
+name = "backtrace"
+version = "0.3.59"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4717cfcbfaa661a0fd48f8453951837ae7e8f81e481fbb136e3202d72805a744"
+dependencies = [
+ "addr2line",
+ "cc",
+ "cfg-if 1.0.0",
+ "libc",
+ "miniz_oxide",
+ "object",
+ "rustc-demangle",
+]
 
 [[package]]
 name = "base64"
@@ -545,6 +569,7 @@ dependencies = [
  "deno_webidl",
  "deno_websocket",
  "deno_webstorage",
+ "deno_wps",
  "dissimilar",
  "dprint-plugin-json",
  "dprint-plugin-markdown",
@@ -726,6 +751,7 @@ dependencies = [
  "deno_webidl",
  "deno_websocket",
  "deno_webstorage",
+ "deno_wps",
  "dlopen",
  "encoding_rs",
  "filetime",
@@ -823,6 +849,15 @@ version = "0.2.0"
 dependencies = [
  "deno_core",
  "rusqlite",
+ "serde",
+]
+
+[[package]]
+name = "deno_wps"
+version = "0.1.0"
+dependencies = [
+ "deno_core",
+ "ferris-says",
  "serde",
 ]
 
@@ -1029,6 +1064,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "error-chain"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9435d864e017c3c6afeac1654189b06cdb491cf2ff73dbf0d73b0f292f42ff8"
+dependencies = [
+ "backtrace",
+]
+
+[[package]]
 name = "exec"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1058,6 +1102,19 @@ checksum = "fe09872bd11351a75f22b24c3769fc863e8212d926d6db46b94ad710d14cc5cc"
 dependencies = [
  "bit-set",
  "regex",
+]
+
+[[package]]
+name = "ferris-says"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f34f82e9a8b1533c027d018abd90b8687bf923be287b2617dfce4bea4ea3687"
+dependencies = [
+ "clap",
+ "error-chain",
+ "smallvec 0.4.5",
+ "textwrap",
+ "unicode-width",
 ]
 
 [[package]]
@@ -1349,7 +1406,7 @@ dependencies = [
  "parking_lot",
  "range-alloc",
  "raw-window-handle",
- "smallvec",
+ "smallvec 1.6.1",
  "spirv_cross",
  "thunderdome",
  "winapi 0.3.9",
@@ -1372,7 +1429,7 @@ dependencies = [
  "parking_lot",
  "range-alloc",
  "raw-window-handle",
- "smallvec",
+ "smallvec 1.6.1",
  "spirv_cross",
  "thunderdome",
  "winapi 0.3.9",
@@ -1453,7 +1510,7 @@ dependencies = [
  "objc",
  "parking_lot",
  "raw-window-handle",
- "smallvec",
+ "smallvec 1.6.1",
  "winapi 0.3.9",
 ]
 
@@ -1468,6 +1525,12 @@ dependencies = [
  "raw-window-handle",
  "thiserror",
 ]
+
+[[package]]
+name = "gimli"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e4075386626662786ddb0ec9081e7c7eeb1ba31951f447ca780ef9f5d568189"
 
 [[package]]
 name = "glow"
@@ -2061,7 +2124,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77a5d83df9f36fe23f0c3648c6bbb8b0298bb5f1939c8f2704431371f4b84d43"
 dependencies = [
- "smallvec",
+ "smallvec 1.6.1",
 ]
 
 [[package]]
@@ -2164,6 +2227,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "object"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a5b3dd1c072ee7963717671d1ca129f1048fda25edea6b752bfc71ac8854170"
+
+[[package]]
 name = "once_cell"
 version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2215,7 +2284,7 @@ dependencies = [
  "instant",
  "libc",
  "redox_syscall",
- "smallvec",
+ "smallvec 1.6.1",
  "winapi 0.3.9",
 ]
 
@@ -2709,8 +2778,14 @@ dependencies = [
  "hashlink",
  "libsqlite3-sys",
  "memchr",
- "smallvec",
+ "smallvec 1.6.1",
 ]
+
+[[package]]
+name = "rustc-demangle"
+version = "0.1.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "410f7acf3cb3a44527c5d9546bad4bf4e6c460915d5f9f2fc524498bfe8f70ce"
 
 [[package]]
 name = "rustc_version"
@@ -2762,7 +2837,7 @@ dependencies = [
  "nix",
  "radix_trie",
  "scopeguard",
- "smallvec",
+ "smallvec 1.6.1",
  "unicode-segmentation",
  "unicode-width",
  "utf8parse",
@@ -2950,6 +3025,12 @@ name = "slotmap"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c46a3482db8f247956e464d783693ece164ca056e6e67563ee5505bdb86452cd"
+
+[[package]]
+name = "smallvec"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f90c5e5fe535e48807ab94fc611d323935f39d4660c52b26b96446a7b33aef10"
 
 [[package]]
 name = "smallvec"
@@ -3215,7 +3296,7 @@ dependencies = [
  "log",
  "num-bigint",
  "serde",
- "smallvec",
+ "smallvec 1.6.1",
  "swc_atoms",
  "swc_common",
  "swc_ecma_ast",
@@ -3253,7 +3334,7 @@ dependencies = [
  "once_cell",
  "phf",
  "scoped-tls",
- "smallvec",
+ "smallvec 1.6.1",
  "swc_atoms",
  "swc_common",
  "swc_ecma_ast",
@@ -3293,7 +3374,7 @@ dependencies = [
  "either",
  "fxhash",
  "serde",
- "smallvec",
+ "smallvec 1.6.1",
  "swc_atoms",
  "swc_common",
  "swc_ecma_ast",
@@ -3787,7 +3868,7 @@ dependencies = [
  "log",
  "rand 0.8.3",
  "serde",
- "smallvec",
+ "smallvec 1.6.1",
  "thiserror",
  "tinyvec",
  "tokio",
@@ -3809,7 +3890,7 @@ dependencies = [
  "parking_lot",
  "resolv-conf",
  "serde",
- "smallvec",
+ "smallvec 1.6.1",
  "thiserror",
  "tokio",
  "trust-dns-proto",
@@ -4161,7 +4242,7 @@ dependencies = [
  "profiling",
  "ron",
  "serde",
- "smallvec",
+ "smallvec 1.6.1",
  "thiserror",
  "wgpu-types",
 ]

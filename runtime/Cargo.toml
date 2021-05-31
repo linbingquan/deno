@@ -31,6 +31,7 @@ deno_webgpu = { version = "0.8.0", path = "../extensions/webgpu" }
 deno_webidl = { version = "0.7.0", path = "../extensions/webidl" }
 deno_websocket = { version = "0.12.0", path = "../extensions/websocket" }
 deno_webstorage = { version = "0.2.0", path = "../extensions/webstorage" }
+deno_wps = { version = "0.1.0", path = "../extensions/wps" }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1.11"
@@ -50,6 +51,7 @@ deno_webgpu = { version = "0.8.0", path = "../extensions/webgpu" }
 deno_webidl = { version = "0.7.0", path = "../extensions/webidl" }
 deno_websocket = { version = "0.12.0", path = "../extensions/websocket" }
 deno_webstorage = { version = "0.2.0", path = "../extensions/webstorage" }
+deno_wps = { version = "0.1.0", path = "../extensions/wps" }
 
 atty = "0.2.14"
 bytes = "1"

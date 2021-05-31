@@ -1,0 +1,15 @@
+[package]
+name = "deno_wps"
+version = "0.1.0"
+authors = ["linbingquan <695601626@qq.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+ferris-says = "0.2"
+deno_core = { version = "0.88.0", path = "../../core" }
+serde = { version = "1.0.125", features = ["derive"] }

@@ -107,6 +107,7 @@ impl MainWorker {
         options.ca_data.clone(),
       ),
       deno_webstorage::init(options.origin_storage_dir.clone()),
+      deno_wps::init(),
       deno_crypto::init(options.seed),
       deno_broadcast_channel::init(
         options.broadcast_channel.clone(),

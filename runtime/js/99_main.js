@@ -35,6 +35,7 @@ delete Object.prototype.__proto__;
   const fetch = window.__bootstrap.fetch;
   const prompt = window.__bootstrap.prompt;
   const denoNs = window.__bootstrap.denoNs;
+  const wpsNs = window.__bootstrap.wpsNs;
   const denoNsUnstable = window.__bootstrap.denoNsUnstable;
   const errors = window.__bootstrap.errors.errors;
   const webidl = window.__bootstrap.webidl;
@@ -447,6 +448,9 @@ delete Object.prototype.__proto__;
       close: core.close,
       memoryUsage: core.memoryUsage,
       ...denoNs,
+      wps: {
+        ...wpsNs
+      }
     };
     Object.defineProperties(finalDenoNs, {
       pid: util.readOnly(pid),
