@@ -8,10 +8,13 @@ mod lockfile;
 pub mod package_json;
 
 pub use self::import_map::resolve_import_map;
-use self::package_json::PackageJsonDeps;
 use ::import_map::ImportMap;
 use deno_ast::SourceMapOption;
+use deno_config::package_json::PackageJsonDeps;
 use deno_core::resolve_url_or_path;
+use deno_graph::GraphKind;
+use deno_npm::npm_rc::NpmRc;
+use deno_npm::npm_rc::ResolvedNpmRc;
 use deno_npm::resolution::ValidSerializedNpmResolutionSnapshot;
 use deno_npm::NpmSystemInfo;
 use deno_runtime::deno_tls::RootCertStoreProvider;
@@ -31,25 +34,23 @@ pub use deno_config::TsConfigType;
 pub use deno_config::TsTypeLib;
 pub use deno_config::WorkspaceConfig;
 pub use flags::*;
-pub use lockfile::Lockfile;
-pub use lockfile::LockfileError;
+pub use lockfile::CliLockfile;
 pub use package_json::PackageJsonDepsProvider;
 
 use deno_ast::ModuleSpecifier;
 use deno_core::anyhow::bail;
 use deno_core::anyhow::Context;
 use deno_core::error::AnyError;
-use deno_core::parking_lot::Mutex;
 use deno_core::serde_json;
 use deno_core::url::Url;
 use deno_runtime::deno_node::PackageJson;
+use deno_runtime::deno_permissions::PermissionsOptions;
 use deno_runtime::deno_tls::deno_native_certs::load_native_certs;
 use deno_runtime::deno_tls::rustls;
 use deno_runtime::deno_tls::rustls::RootCertStore;
 use deno_runtime::deno_tls::rustls_pemfile;
 use deno_runtime::deno_tls::webpki_roots;
 use deno_runtime::inspector_server::InspectorServer;
-use deno_runtime::permissions::PermissionsOptions;
 use deno_terminal::colors;
 use dotenvy::from_filename;
 use once_cell::sync::Lazy;
@@ -61,7 +62,6 @@ use std::env;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::net::SocketAddr;
-use std::num::NonZeroU16;
 use std::num::NonZeroUsize;
 use std::path::Path;
 use std::path::PathBuf;
@@ -69,6 +69,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::args::import_map::enhance_import_map_value_with_workspace_members;
+use crate::cache;
 use crate::file_fetcher::FileFetcher;
 use crate::util::fs::canonicalize_path_maybe_not_exists;
 use crate::version;
@@ -194,7 +195,7 @@ pub fn ts_config_to_transpile_and_emit_options(
     },
     deno_ast::EmitOptions {
       inline_sources: options.inline_sources,
-      keep_comments: false,
+      remove_comments: false,
       source_map,
       source_map_file: None,
     },
@@ -534,7 +535,7 @@ fn discover_package_json(
   flags: &Flags,
   maybe_stop_at: Option<PathBuf>,
   current_dir: &Path,
-) -> Result<Option<PackageJson>, AnyError> {
+) -> Result<Option<Arc<PackageJson>>, AnyError> {
   // TODO(bartlomieju): discover for all subcommands, but print warnings that
   // `package.json` is ignored in bundle/compile/etc.
 
@@ -544,6 +545,91 @@ fn discover_package_json(
 
   log::debug!("No package.json file found");
   Ok(None)
+}
+
+/// Discover `.npmrc` file - currently we only support it next to `package.json`
+/// or next to `deno.json`.
+///
+/// In the future we will need to support it in user directory or global directory
+/// as per https://docs.npmjs.com/cli/v10/configuring-npm/npmrc#files.
+pub fn discover_npmrc(
+  maybe_package_json_path: Option<PathBuf>,
+  maybe_deno_json_path: Option<PathBuf>,
+) -> Result<(Arc<ResolvedNpmRc>, Option<PathBuf>), AnyError> {
+  const NPMRC_NAME: &str = ".npmrc";
+
+  fn get_env_var(var_name: &str) -> Option<String> {
+    std::env::var(var_name).ok()
+  }
+
+  fn try_to_read_npmrc(
+    dir: &Path,
+  ) -> Result<Option<(String, PathBuf)>, AnyError> {
+    let path = dir.join(NPMRC_NAME);
+    let maybe_source = match std::fs::read_to_string(&path) {
+      Ok(source) => Some(source),
+      Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+      Err(err) => {
+        bail!("Error loading .npmrc at {}. {:#}", path.display(), err)
+      }
+    };
+
+    Ok(maybe_source.map(|source| (source, path)))
+  }
+
+  fn try_to_parse_npmrc(
+    source: String,
+    path: &Path,
+  ) -> Result<Arc<ResolvedNpmRc>, AnyError> {
+    let npmrc = NpmRc::parse(&source, &get_env_var).with_context(|| {
+      format!("Failed to parse .npmrc at {}", path.display())
+    })?;
+    let resolved = npmrc
+      .as_resolved(npm_registry_url())
+      .context("Failed to resolve .npmrc options")?;
+    Ok(Arc::new(resolved))
+  }
+
+  // 1. Try `.npmrc` next to `package.json`
+  if let Some(package_json_path) = maybe_package_json_path {
+    if let Some(package_json_dir) = package_json_path.parent() {
+      if let Some((source, path)) = try_to_read_npmrc(package_json_dir)? {
+        return try_to_parse_npmrc(source, &path).map(|r| (r, Some(path)));
+      }
+    }
+  }
+
+  // 2. Try `.npmrc` next to `deno.json(c)`
+  if let Some(deno_json_path) = maybe_deno_json_path {
+    if let Some(deno_json_dir) = deno_json_path.parent() {
+      if let Some((source, path)) = try_to_read_npmrc(deno_json_dir)? {
+        return try_to_parse_npmrc(source, &path).map(|r| (r, Some(path)));
+      }
+    }
+  }
+
+  // TODO(bartlomieju): update to read both files - one in the project root and one and
+  // home dir and then merge them.
+  // 3. Try `.npmrc` in the user's home directory
+  if let Some(home_dir) = cache::home_dir() {
+    if let Some((source, path)) = try_to_read_npmrc(&home_dir)? {
+      return try_to_parse_npmrc(source, &path).map(|r| (r, Some(path)));
+    }
+  }
+
+  log::debug!("No .npmrc file found");
+  Ok((create_default_npmrc(), None))
+}
+
+pub fn create_default_npmrc() -> Arc<ResolvedNpmRc> {
+  Arc::new(ResolvedNpmRc {
+    default_config: deno_npm::npm_rc::RegistryConfigWithUrl {
+      registry_url: npm_registry_url().clone(),
+      config: Default::default(),
+    },
+    scopes: Default::default(),
+    registry_configs: Default::default(),
+  })
 }
 
 struct CliRootCertStoreProvider {
@@ -619,21 +705,13 @@ pub fn get_root_cert_store(
   for store in ca_stores.iter() {
     match store.as_str() {
       "mozilla" => {
-        root_cert_store.add_trust_anchors(
-          webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-              ta.subject,
-              ta.spki,
-              ta.name_constraints,
-            )
-          }),
-        );
+        root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.to_vec());
       }
       "system" => {
         let roots = load_native_certs().expect("could not load platform certs");
         for root in roots {
           root_cert_store
-            .add(&rustls::Certificate(root.0))
+            .add(rustls::pki_types::CertificateDer::from(root.0))
             .expect("Failed to add platform cert to root cert store");
         }
       }
@@ -657,17 +735,17 @@ pub fn get_root_cert_store(
           RootCertStoreLoadError::CaFileOpenError(err.to_string())
         })?;
         let mut reader = BufReader::new(certfile);
-        rustls_pemfile::certs(&mut reader)
+        rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()
       }
       CaData::Bytes(data) => {
         let mut reader = BufReader::new(Cursor::new(data));
-        rustls_pemfile::certs(&mut reader)
+        rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()
       }
     };
 
     match result {
       Ok(certs) => {
-        root_cert_store.add_parsable_certificates(&certs);
+        root_cert_store.add_parsable_certificates(certs);
       }
       Err(e) => {
         return Err(RootCertStoreLoadError::FailedAddPemFile(e.to_string()));
@@ -721,8 +799,9 @@ pub struct CliOptions {
   maybe_node_modules_folder: Option<PathBuf>,
   maybe_vendor_folder: Option<PathBuf>,
   maybe_config_file: Option<ConfigFile>,
-  maybe_package_json: Option<PackageJson>,
-  maybe_lockfile: Option<Arc<Mutex<Lockfile>>>,
+  maybe_package_json: Option<Arc<PackageJson>>,
+  npmrc: Arc<ResolvedNpmRc>,
+  maybe_lockfile: Option<Arc<CliLockfile>>,
   overrides: CliOptionOverrides,
   maybe_workspace_config: Option<WorkspaceConfig>,
   pub disable_deprecated_api_warning: bool,
@@ -734,8 +813,9 @@ impl CliOptions {
     flags: Flags,
     initial_cwd: PathBuf,
     maybe_config_file: Option<ConfigFile>,
-    maybe_lockfile: Option<Arc<Mutex<Lockfile>>>,
-    maybe_package_json: Option<PackageJson>,
+    maybe_lockfile: Option<Arc<CliLockfile>>,
+    maybe_package_json: Option<Arc<PackageJson>>,
+    npmrc: Arc<ResolvedNpmRc>,
     force_global_cache: bool,
   ) -> Result<Self, AnyError> {
     if let Some(insecure_allowlist) =
@@ -760,7 +840,7 @@ impl CliOptions {
       &initial_cwd,
       &flags,
       maybe_config_file.as_ref(),
-      maybe_package_json.as_ref(),
+      maybe_package_json.as_deref(),
     )
     .with_context(|| "Resolving node_modules folder.")?;
     let maybe_vendor_folder = if force_global_cache {
@@ -776,13 +856,17 @@ impl CliOptions {
       };
 
     if let Some(env_file_name) = &flags.env_file {
-      if (from_filename(env_file_name)).is_err() {
-        log::info!(
-          "{} The `--env` flag was used, but the dotenv file '{}' was not found.",
-          colors::yellow("Warning"),
-          env_file_name
-        );
-      }
+      match from_filename(env_file_name) {
+          Ok(_) => (),
+          Err(error) => {
+            match error {
+              dotenvy::Error::LineParse(line, index)=> log::info!("{} Parsing failed within the specified environment file: {} at index: {} of the value: {}",colors::yellow("Warning"), env_file_name, index, line),
+              dotenvy::Error::Io(_)=> log::info!("{} The `--env` flag was used, but the environment file specified '{}' was not found.",colors::yellow("Warning"),env_file_name),
+              dotenvy::Error::EnvVar(_)=>log::info!("{} One or more of the environment variables isn't present or not unicode within the specified environment file: {}",colors::yellow("Warning"),env_file_name),
+              _ => log::info!("{} Unknown failure occurred with the specified environment file: {}", colors::yellow("Warning"), env_file_name),
+            }
+          }
+        }
     }
 
     let disable_deprecated_api_warning = flags.log_level
@@ -798,6 +882,7 @@ impl CliOptions {
       maybe_config_file,
       maybe_lockfile,
       maybe_package_json,
+      npmrc,
       maybe_node_modules_folder,
       maybe_vendor_folder,
       overrides: Default::default(),
@@ -851,15 +936,29 @@ impl CliOptions {
     } else {
       maybe_package_json = discover_package_json(&flags, None, &initial_cwd)?;
     }
+    let (npmrc, _) = discover_npmrc(
+      maybe_package_json.as_ref().map(|p| p.path.clone()),
+      maybe_config_file.as_ref().and_then(|cf| {
+        if cf.specifier.scheme() == "file" {
+          Some(cf.specifier.to_file_path().unwrap())
+        } else {
+          None
+        }
+      }),
+    )?;
 
-    let maybe_lock_file =
-      lockfile::discover(&flags, maybe_config_file.as_ref())?;
+    let maybe_lock_file = CliLockfile::discover(
+      &flags,
+      maybe_config_file.as_ref(),
+      maybe_package_json.as_deref(),
+    )?;
     Self::new(
       flags,
       initial_cwd,
       maybe_config_file,
-      maybe_lock_file.map(|l| Arc::new(Mutex::new(l))),
+      maybe_lock_file.map(Arc::new),
       maybe_package_json,
+      npmrc,
       false,
     )
   }
@@ -871,6 +970,14 @@ impl CliOptions {
 
   pub fn maybe_config_file_specifier(&self) -> Option<ModuleSpecifier> {
     self.maybe_config_file.as_ref().map(|f| f.specifier.clone())
+  }
+
+  pub fn graph_kind(&self) -> GraphKind {
+    match self.sub_command() {
+      DenoSubcommand::Cache(_) => GraphKind::All,
+      DenoSubcommand::Check(_) => GraphKind::TypesOnly,
+      _ => self.type_check_mode().as_graph_kind(),
+    }
   }
 
   pub fn ts_type_lib_window(&self) -> TsTypeLib {
@@ -1027,7 +1134,7 @@ impl CliOptions {
     }
   }
 
-  pub fn serve_port(&self) -> Option<NonZeroU16> {
+  pub fn serve_port(&self) -> Option<u16> {
     if let DenoSubcommand::Serve(flags) = self.sub_command() {
       Some(flags.port)
     } else {
@@ -1161,6 +1268,7 @@ impl CliOptions {
       maybe_vendor_folder: self.maybe_vendor_folder.clone(),
       maybe_config_file: self.maybe_config_file.clone(),
       maybe_package_json: self.maybe_package_json.clone(),
+      npmrc: self.npmrc.clone(),
       maybe_lockfile: self.maybe_lockfile.clone(),
       maybe_workspace_config: self.maybe_workspace_config.clone(),
       overrides: self.overrides.clone(),
@@ -1234,7 +1342,7 @@ impl CliOptions {
     Ok(Some(InspectorServer::new(host, version::get_user_agent())?))
   }
 
-  pub fn maybe_lockfile(&self) -> Option<Arc<Mutex<Lockfile>>> {
+  pub fn maybe_lockfile(&self) -> Option<Arc<CliLockfile>> {
     self.maybe_lockfile.clone()
   }
 
@@ -1246,7 +1354,7 @@ impl CliOptions {
     } else if self.maybe_package_json.is_some() {
       Ok(Default::default())
     } else {
-      bail!("No config file found")
+      bail!("deno task couldn't find deno.json(c). See https://deno.land/manual@v{}/getting_started/configuration_file", env!("CARGO_PKG_VERSION"))
     }
   }
 
@@ -1288,8 +1396,12 @@ impl CliOptions {
     &self.maybe_workspace_config
   }
 
-  pub fn maybe_package_json(&self) -> &Option<PackageJson> {
-    &self.maybe_package_json
+  pub fn maybe_package_json(&self) -> Option<&Arc<PackageJson>> {
+    self.maybe_package_json.as_ref()
+  }
+
+  pub fn npmrc(&self) -> &Arc<ResolvedNpmRc> {
+    &self.npmrc
   }
 
   pub fn maybe_package_json_deps(&self) -> Option<PackageJsonDeps> {
@@ -1303,7 +1415,7 @@ impl CliOptions {
       self
         .maybe_package_json()
         .as_ref()
-        .map(package_json::get_local_package_json_version_reqs)
+        .map(|p| p.resolve_local_package_json_version_reqs())
     }
   }
 
@@ -1329,6 +1441,27 @@ impl CliOptions {
       None
     };
     LintOptions::resolve(maybe_lint_config, Some(lint_flags), &self.initial_cwd)
+  }
+
+  pub fn resolve_lint_config(
+    &self,
+  ) -> Result<deno_lint::linter::LintConfig, AnyError> {
+    let ts_config_result =
+      self.resolve_ts_config_for_emit(TsConfigType::Emit)?;
+
+    let (transpile_options, _) =
+      crate::args::ts_config_to_transpile_and_emit_options(
+        ts_config_result.ts_config,
+      )?;
+
+    Ok(deno_lint::linter::LintConfig {
+      default_jsx_factory: transpile_options
+        .jsx_automatic
+        .then(|| transpile_options.jsx_factory.clone()),
+      default_jsx_fragment_factory: transpile_options
+        .jsx_automatic
+        .then(|| transpile_options.jsx_fragment_factory.clone()),
+    })
   }
 
   pub fn resolve_config_excludes(&self) -> Result<PathOrPatternSet, AnyError> {
@@ -1641,6 +1774,15 @@ impl CliOptions {
       .unwrap_or_default();
 
     from_config_file.extend_from_slice(&self.flags.unstable_config.features);
+
+    if *DENO_FUTURE {
+      from_config_file.extend_from_slice(&[
+        deno_runtime::deno_ffi::UNSTABLE_FEATURE_NAME.to_string(),
+        deno_runtime::deno_fs::UNSTABLE_FEATURE_NAME.to_string(),
+        deno_runtime::deno_webgpu::UNSTABLE_FEATURE_NAME.to_string(),
+      ]);
+    }
+
     from_config_file
   }
 

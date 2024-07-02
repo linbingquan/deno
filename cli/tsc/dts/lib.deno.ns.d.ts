@@ -50,10 +50,10 @@ declare interface ImportMeta {
    * * Example:
    * ```
    * // Unix
-   * console.log(import.meta.dirname); // /home/alice/
+   * console.log(import.meta.dirname); // /home/alice
    *
    * // Windows
-   * console.log(import.meta.dirname); // C:\alice\
+   * console.log(import.meta.dirname); // C:\alice
    * ```
    */
   dirname?: string;
@@ -1466,6 +1466,23 @@ declare namespace Deno {
    */
   export function exit(code?: number): never;
 
+  /** The exit code for the Deno process.
+   *
+   * If no exit code has been supplied, then Deno will assume a return code of `0`.
+   *
+   * When setting an exit code value, a number or non-NaN string must be provided,
+   * otherwise a TypeError will be thrown.
+   *
+   * ```ts
+   * console.log(Deno.exitCode); //-> 0
+   * Deno.exitCode = 1;
+   * console.log(Deno.exitCode); //-> 1
+   * ```
+   *
+   * @category Runtime
+   */
+  export var exitCode: number;
+
   /** An interface containing methods to interact with the process environment
    * variables.
    *
@@ -2563,8 +2580,7 @@ declare namespace Deno {
      * ```
      */
     statSync(): FileInfo;
-    /** **UNSTABLE**: New API, yet to be vetted.
-     *
+    /**
      * Flushes any pending data and metadata operations of the given file
      * stream to disk.
      *
@@ -2582,8 +2598,7 @@ declare namespace Deno {
      * @category I/O
      */
     sync(): Promise<void>;
-    /** **UNSTABLE**: New API, yet to be vetted.
-     *
+    /**
      * Synchronously flushes any pending data and metadata operations of the given
      * file stream to disk.
      *
@@ -2601,8 +2616,7 @@ declare namespace Deno {
      * @category I/O
      */
     syncSync(): void;
-    /** **UNSTABLE**: New API, yet to be vetted.
-     *
+    /**
      * Flushes any pending data operations of the given file stream to disk.
      *  ```ts
      * using file = await Deno.open(
@@ -2617,8 +2631,7 @@ declare namespace Deno {
      * @category I/O
      */
     syncData(): Promise<void>;
-    /** **UNSTABLE**: New API, yet to be vetted.
-     *
+    /**
      * Synchronously flushes any pending data operations of the given file stream
      * to disk.
      *
@@ -2686,27 +2699,23 @@ declare namespace Deno {
      * ```
      */
     setRaw(mode: boolean, options?: SetRawOptions): void;
-    /** **UNSTABLE**: New API, yet to be vetted.
-     *
+    /**
      * Acquire an advisory file-system lock for the file.
      *
      * @param [exclusive=false]
      */
     lock(exclusive?: boolean): Promise<void>;
-    /** **UNSTABLE**: New API, yet to be vetted.
-     *
+    /**
      * Synchronously acquire an advisory file-system lock synchronously for the file.
      *
      * @param [exclusive=false]
      */
     lockSync(exclusive?: boolean): void;
-    /** **UNSTABLE**: New API, yet to be vetted.
-     *
+    /**
      * Release an advisory file-system lock for the file.
      */
     unlock(): Promise<void>;
-    /** **UNSTABLE**: New API, yet to be vetted.
-     *
+    /**
      * Synchronously release an advisory file-system lock for the file.
      */
     unlockSync(): void;
@@ -4407,6 +4416,8 @@ declare namespace Deno {
     | "SIGINFO"
     | "SIGINT"
     | "SIGIO"
+    | "SIGPOLL"
+    | "SIGUNUSED"
     | "SIGKILL"
     | "SIGPIPE"
     | "SIGPROF"
@@ -4531,6 +4542,9 @@ declare namespace Deno {
    * If `stdin` is set to `"piped"`, the `stdin` {@linkcode WritableStream}
    * needs to be closed manually.
    *
+   * `Command` acts as a builder. Each call to {@linkcode Command.spawn} or
+   * {@linkcode Command.output} will spawn a new subprocess.
+   *
    * @example Spawn a subprocess and pipe the output to a file
    *
    * ```ts
@@ -4592,8 +4606,6 @@ declare namespace Deno {
     /**
      * Executes the {@linkcode Deno.Command}, waiting for it to finish and
      * collecting all of its output.
-     * If `spawn()` was called, calling this function will collect the remaining
-     * output.
      *
      * Will throw an error if `stdin: "piped"` is set.
      *
@@ -5344,16 +5356,16 @@ declare namespace Deno {
    *
    * @category File System */
   export interface SymlinkOptions {
-    /** If the symbolic link should be either a file or directory. This option
-     * only applies to Windows and is ignored on other operating systems. */
-    type: "file" | "dir";
+    /** Specify the symbolic link type as file, directory or NTFS junction. This
+     * option only applies to Windows and is ignored on other operating systems. */
+    type: "file" | "dir" | "junction";
   }
 
   /**
    * Creates `newpath` as a symbolic link to `oldpath`.
    *
-   * The `options.type` parameter can be set to `"file"` or `"dir"`. This
-   * argument is only available on Windows and ignored on other platforms.
+   * The `options.type` parameter can be set to `"file"`, `"dir"` or `"junction"`.
+   * This argument is only available on Windows and ignored on other platforms.
    *
    * ```ts
    * await Deno.symlink("old/name", "new/name");
@@ -5373,8 +5385,8 @@ declare namespace Deno {
   /**
    * Creates `newpath` as a symbolic link to `oldpath`.
    *
-   * The `options.type` parameter can be set to `"file"` or `"dir"`. This
-   * argument is only available on Windows and ignored on other platforms.
+   * The `options.type` parameter can be set to `"file"`, `"dir"` or `"junction"`.
+   * This argument is only available on Windows and ignored on other platforms.
    *
    * ```ts
    * Deno.symlinkSync("old/name", "new/name");
@@ -5738,7 +5750,7 @@ declare namespace Deno {
      * `pong` within the timeout specified, the connection is deemed
      * unhealthy and is closed. The `close` and `error` event will be emitted.
      *
-     * The unit is seconds, with a default of 120.
+     * The unit is seconds, with a default of 30.
      * Set to `0` to disable timeouts. */
     idleTimeout?: number;
   }
