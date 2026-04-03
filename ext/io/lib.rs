@@ -600,7 +600,7 @@ impl StdFileResourceInner {
         state.lock().reading = true;
         let nread = match file.read(&mut buf) {
           Ok(nread) => nread,
-          Err(e) => return Err((e.into(), buf)),
+          Err(e) => return Err(Box::new((e.into(), buf))),
         };
 
         let mut state = state.lock();
@@ -648,18 +648,24 @@ impl StdFileResourceInner {
           /* Unblock the main thread */
           state.cvar.notify_one();
 
-          return Err((FsError::FileBusy, buf));
+          return Err(Box::new((FsError::FileBusy, buf)));
         }
 
         Ok((nread, buf))
       });
 
       match fut.await {
-        Err((FsError::FileBusy, b)) => {
-          buf = b;
-          continue;
+        Err(b) => {
+          let (err, b) = *b;
+          match err {
+            FsError::FileBusy => {
+              buf = b;
+              continue;
+            }
+            e => return Err(e),
+          }
         }
-        other => return other.map_err(|(e, _)| e),
+        Ok(v) => return Ok(v),
       }
     }
   }
