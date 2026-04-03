@@ -737,7 +737,7 @@ fn resolve_workspace_for_config_folder<
      pattern_members: Vec<&String>,
      dir_path: &Path,
      config_file_names: &'static [&'static str]|
-     -> Result<Vec<PathBuf>, WorkspaceDiscoverErrorKind> {
+     -> Result<Vec<PathBuf>, WorkspaceDiscoverError> {
       let patterns = pattern_members
         .iter()
         .flat_map(|raw_member| {
@@ -761,7 +761,8 @@ fn resolve_workspace_for_config_folder<
             })
           })
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| WorkspaceDiscoverError::from(WorkspaceDiscoverErrorKind::from(e)))?;
 
       let paths = if patterns.is_empty() {
         Vec::new()
